@@ -330,6 +330,7 @@ public:
      *                 instr[20]=imm[11],  instr[19:12]=imm[19:12].
      */
     static int32_t extract_imm_J(uint32_t instr);
+    uint32_t get_pc() const { return pc_; } // Get PC
 
 private:
     // =========================================================================

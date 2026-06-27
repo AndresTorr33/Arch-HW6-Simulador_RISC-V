@@ -208,7 +208,7 @@ bool Simulator::load_from_file(const std::string& filename)
 
     // Reporte de exito
     std::cout << "[LOAD OK] \"" << filename << "\"\n"
-              << "  Tamaño   : " << std::dec << file_size << " bytes\n"
+              << "  Tamanho   : " << std::dec << file_size << " bytes\n"
               << "  Rango    : 0x00000000 .. 0x"
               << std::hex << std::setw(8) << std::setfill('0') << (file_size - 1)
               << std::dec << "\n";

@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
     }
 
     std::cout << "[LOAD OK] \"" << argv[1] << "\" listo para ejecucion.\n";
-    std::cout << "Comandos: 'step' (avanzar), 'regs' (registros), 'mem <hex>' (memoria), 'exit' (salir)\n\n";
+    std::cout << "Comandos: 'step' (avanzar), 'run' (ejecutar hasta el final), 'regs' (registros), 'mem <hex>' (memoria), 'exit' (salir)\n\n";
 
     // -------------------------------------------------------------------------
     // Bucle interactivo REPL (Read-Eval-Print Loop)
@@ -70,7 +70,28 @@ int main(int argc, char* argv[])
                 std::cerr << "La simulacion se ha detenido debido a una excepcion.\n";
                 break; // Rompe el bucle si hay un error fatal (ej. mem fault)
             }
-        } 
+        }
+        else if (command == "run") {
+            std::cout << "Ejecutando programa continuamente (limite de 10,000 inst)...\n";
+            uint64_t instrucciones_ejecutadas = 0;
+            const uint64_t LIMITE = 10000;
+            
+            try {
+                // Ejecuta en bucle con límite
+                while (instrucciones_ejecutadas < LIMITE) {
+                    sim.step();
+                    instrucciones_ejecutadas++;
+                }
+                
+                std::cout << "\n[TIMEOUT] Simulacion detenida. Se alcanzo el limite de " << LIMITE << " instrucciones.\n";
+                std::cout << "El PC se quedo atascado en la direccion: 0x" << std::hex << sim.get_pc() << std::dec << "\n";
+                
+            } 
+            catch (const std::exception& e) {
+                std::cout << "\nSimulacion finalizada correctamente tras " << instrucciones_ejecutadas << " instrucciones.\n";
+                std::cout << "Razon/Estado: " << e.what() << "\n";
+            }
+        }
         else if (command == "regs") {
             sim.print_state();
         } 
@@ -92,21 +113,6 @@ int main(int argc, char* argv[])
         }
         else if (!command.empty()) {
             std::cout << "Comando desconocido.\n";
-        }
-        else if (command == "run") {
-            std::cout << "Ejecutando programa continuamente...\n";
-            uint64_t instrucciones_ejecutadas = 0;
-            try {
-                // Ejecuta en bucle hasta que salte una excepción de halt o instrucción inválida
-                while (true) {
-                    sim.step();
-                    instrucciones_ejecutadas++;
-                }
-            } 
-            catch (const std::exception& e) {
-                std::cout << "\nSimulacion finalizada tras " << instrucciones_ejecutadas << " instrucciones.\n";
-                std::cout << "Razon/Estado: " << e.what() << "\n";
-            }
         }
     }
 
