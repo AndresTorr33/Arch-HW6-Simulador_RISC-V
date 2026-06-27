@@ -13,11 +13,11 @@
 #include "Simulator.hpp"
 
 #include <cstdlib>     // EXIT_SUCCESS, EXIT_FAILURE
-#include <iostream>    // std::cerr, std::cout
-#include <stdexcept>   // std::runtime_error, std::exception
-#include <string>      // std::string
-#include <sstream>     // std::stringstream
-#include <iomanip>     // std::hex, std::dec
+#include <iostream>    // cerr, cout
+#include <stdexcept>   // runtime_error, exception
+#include <string>      // string
+#include <sstream>     // stringstream
+#include <iomanip>     // hex, dec
 
 int main(int argc, char* argv[])
 {
@@ -25,7 +25,7 @@ int main(int argc, char* argv[])
     // Validar argumentos de linea de comandos
     // -------------------------------------------------------------------------
     if (argc < 2) {
-        std::cerr << "Error: se requiere un archivo binario como argumento.\n"
+        cerr << "Error: se requiere un archivo binario como argumento.\n"
                   << "Uso:   " << argv[0] << " <archivo.bin>\n"
                   << "Ejemplo: " << argv[0] << " programa.bin\n";
         return EXIT_FAILURE;
@@ -41,38 +41,38 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    std::cout << "[LOAD OK] \"" << argv[1] << "\" listo para ejecucion.\n";
-    std::cout << "Comandos: 'step' (avanzar), 'run' (ejecutar hasta el final), 'regs' (registros), 'mem <hex>' (memoria), 'exit' (salir)\n\n";
+    cout << "[LOAD OK] \"" << argv[1] << "\" listo para ejecucion.\n";
+    cout << "Comandos: 'step' (avanzar), 'run' (ejecutar hasta el final), 'regs' (registros), 'mem <hex>' (memoria), 'exit' (salir)\n\n";
 
     // -------------------------------------------------------------------------
     // Bucle interactivo REPL (Read-Eval-Print Loop)
     // -------------------------------------------------------------------------
-    std::string line;
+    string line;
     while (true) {
-        std::cout << "> ";
-        if (!std::getline(std::cin, line)) break; // Maneja EOF (Ctrl+D / Ctrl+Z)
+        cout << "> ";
+        if (!getline(cin, line)) break; // Maneja EOF (Ctrl+D / Ctrl+Z)
 
-        std::stringstream ss(line);
-        std::string command;
+        stringstream ss(line);
+        string command;
         ss >> command;
 
         if (command == "exit") {
-            std::cout << "Saliendo del simulador...\n";
+            cout << "Saliendo del simulador...\n";
             break;
         } 
         else if (command == "step") {
             try {
                 sim.step();
-                std::cout << "Instruccion ejecutada.\n";
+                cout << "Instruccion ejecutada.\n";
             } 
-            catch (const std::exception& e) {
-                std::cerr << "[RUNTIME ERROR] " << e.what() << "\n";
-                std::cerr << "La simulacion se ha detenido debido a una excepcion.\n";
+            catch (const exception& e) {
+                cerr << "[RUNTIME ERROR] " << e.what() << "\n";
+                cerr << "La simulacion se ha detenido debido a una excepcion.\n";
                 break; // Rompe el bucle si hay un error fatal (ej. mem fault)
             }
         }
         else if (command == "run") {
-            std::cout << "Ejecutando programa continuamente (limite de 10,000 inst)...\n";
+            cout << "Ejecutando programa continuamente (limite de 10,000 inst)...\n";
             uint64_t instrucciones_ejecutadas = 0;
             const uint64_t LIMITE = 10000;
             
@@ -83,13 +83,13 @@ int main(int argc, char* argv[])
                     instrucciones_ejecutadas++;
                 }
                 
-                std::cout << "\n[TIMEOUT] Simulacion detenida. Se alcanzo el limite de " << LIMITE << " instrucciones.\n";
-                std::cout << "El PC se quedo atascado en la direccion: 0x" << std::hex << sim.get_pc() << std::dec << "\n";
+                cout << "\n[TIMEOUT] Simulacion detenida. Se alcanzo el limite de " << LIMITE << " instrucciones.\n";
+                cout << "El PC se quedo atascado en la direccion: 0x" << hex << sim.get_pc() << dec << "\n";
                 
             } 
-            catch (const std::exception& e) {
-                std::cout << "\nSimulacion finalizada correctamente tras " << instrucciones_ejecutadas << " instrucciones.\n";
-                std::cout << "Razon/Estado: " << e.what() << "\n";
+            catch (const exception& e) {
+                cout << "\nSimulacion finalizada correctamente tras " << instrucciones_ejecutadas << " instrucciones.\n";
+                cout << "Razon/Estado: " << e.what() << "\n";
             }
         }
         else if (command == "regs") {
@@ -98,21 +98,21 @@ int main(int argc, char* argv[])
         else if (command == "mem") {
             uint32_t addr;
             // Lee la direccion en formato hexadecimal (sin necesidad del 0x)
-            if (ss >> std::hex >> addr) {
+            if (ss >> hex >> addr) {
                 try {
                     // Muestra 4 bytes (1 word) leidos desde la memoria
                     uint32_t val = sim.read_word(addr);
-                    std::cout << "Memoria [0x" << std::hex << addr << "]: 0x" 
-                              << std::setfill('0') << std::setw(8) << val << std::dec << "\n";
-                } catch (const std::exception& e) {
-                    std::cerr << "[MEM ERROR] " << e.what() << "\n";
+                    cout << "Memoria [0x" << hex << addr << "]: 0x" 
+                              << setfill('0') << setw(8) << val << dec << "\n";
+                } catch (const exception& e) {
+                    cerr << "[MEM ERROR] " << e.what() << "\n";
                 }
             } else {
-                std::cout << "Uso: mem <direccion_hex> (ej. mem 64 para la direccion 0x64)\n";
+                cout << "Uso: mem <direccion_hex> (ej. mem 64 para la direccion 0x64)\n";
             }
         }
         else if (!command.empty()) {
-            std::cout << "Comando desconocido.\n";
+            cout << "Comando desconocido.\n";
         }
     }
 

@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+using namespace std;
+
 // =============================================================================
 // Clase principal
 // =============================================================================
@@ -50,7 +52,7 @@ public:
      *   x18=s2   ...     x27=s11
      *   x28=t3   x29=t4  x30=t5  x31=t6
      */
-    static constexpr std::array<const char*, 32> ABI_NAMES = {
+    static constexpr array<const char*, 32> ABI_NAMES = {
         "zero", "ra",  "sp",  "gp",  "tp",  "t0",  "t1",  "t2",
         "s0",   "s1",  "a0",  "a1",  "a2",  "a3",  "a4",  "a5",
         "a6",   "a7",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7",
@@ -101,7 +103,7 @@ public:
      * @return          true si la carga fue exitosa, false en caso contrario.
      *                  En caso de error se imprime un mensaje descriptivo en stderr.
      */
-    bool load_from_file(const std::string& filename);
+    bool load_from_file(const string& filename);
 
     // =========================================================================
     // Ciclo de ejecucion
@@ -113,7 +115,7 @@ public:
      * Utiliza read_word(pc_) internamente. No modifica el PC.
      *
      * @return Instruccion de 32 bits en formato little-endian reconstruido.
-     * @throws std::runtime_error si pc_ esta fuera de rango o no alineado.
+     * @throws runtime_error si pc_ esta fuera de rango o no alineado.
      */
     uint32_t fetch();
 
@@ -127,7 +129,7 @@ public:
      *   4. switch(opcode) — despacha a la familia de instrucciones
      *
      * Las familias individuales (Execute) se implementan en la Fase 3.
-     * Un opcode desconocido lanza std::runtime_error.
+     * Un opcode desconocido lanza runtime_error.
      */
     void step();
 
@@ -150,7 +152,7 @@ public:
      * @brief Lee el valor del registro x{idx}.
      * @param idx  Indice del registro (0–31).
      * @return     Valor de 32 bits almacenado en el registro.
-     * @throws     std::out_of_range si idx >= 32.
+     * @throws     out_of_range si idx >= 32.
      */
     uint32_t get_reg(uint8_t idx) const;
 
@@ -162,7 +164,7 @@ public:
      *
      * @param idx  Indice del registro destino (0–31).
      * @param val  Valor de 32 bits a escribir.
-     * @throws     std::out_of_range si idx >= 32.
+     * @throws     out_of_range si idx >= 32.
      */
     void set_reg(uint8_t idx, uint32_t val);
 
@@ -174,7 +176,7 @@ public:
      * @brief Lee 1 byte desde la direccion dada.
      * @param address  Direccion de memoria (sin restriccion de alineacion).
      * @return         Byte leído.
-     * @throws         std::runtime_error si address >= MEM_SIZE.
+     * @throws         runtime_error si address >= MEM_SIZE.
      */
     uint8_t read_byte(uint32_t address) const;
 
@@ -183,11 +185,11 @@ public:
      *
      * Requiere alineacion estricta: address % 2 == 0.
      * En caso de acceso no alineado, se imprime un mensaje de error y se
-     * lanza std::runtime_error deteniendo la simulacion.
+     * lanza runtime_error deteniendo la simulacion.
      *
      * @param address  Direccion base (debe ser multiplo de 2).
      * @return         Halfword de 16 bits reconstruido en orden del host.
-     * @throws         std::runtime_error si no alineado o fuera de rango.
+     * @throws         runtime_error si no alineado o fuera de rango.
      */
     uint16_t read_halfword(uint32_t address) const;
 
@@ -196,11 +198,11 @@ public:
      *
      * Requiere alineacion estricta: address % 4 == 0.
      * En caso de acceso no alineado, se imprime un mensaje de error y se
-     * lanza std::runtime_error deteniendo la simulacion.
+     * lanza runtime_error deteniendo la simulacion.
      *
      * @param address  Direccion base (debe ser multiplo de 4).
      * @return         Word de 32 bits reconstruido en orden del host.
-     * @throws         std::runtime_error si no alineado o fuera de rango.
+     * @throws         runtime_error si no alineado o fuera de rango.
      */
     uint32_t read_word(uint32_t address) const;
 
@@ -212,7 +214,7 @@ public:
      * @brief Escribe 1 byte en la direccion dada.
      * @param address  Direccion de memoria.
      * @param val      Byte a escribir.
-     * @throws         std::runtime_error si address >= MEM_SIZE.
+     * @throws         runtime_error si address >= MEM_SIZE.
      */
     void write_byte(uint32_t address, uint8_t val);
 
@@ -223,7 +225,7 @@ public:
      *
      * @param address  Direccion base (debe ser multiplo de 2).
      * @param val      Halfword de 16 bits a escribir (LSB va a address).
-     * @throws         std::runtime_error si no alineado o fuera de rango.
+     * @throws         runtime_error si no alineado o fuera de rango.
      */
     void write_halfword(uint32_t address, uint16_t val);
 
@@ -234,7 +236,7 @@ public:
      *
      * @param address  Direccion base (debe ser multiplo de 4).
      * @param val      Word de 32 bits a escribir (LSB va a address).
-     * @throws         std::runtime_error si no alineado o fuera de rango.
+     * @throws         runtime_error si no alineado o fuera de rango.
      */
     void write_word(uint32_t address, uint32_t val);
 
@@ -341,7 +343,7 @@ private:
      * @brief Valida alineacion y limites antes de cualquier acceso a memoria.
      *
      * Imprime un mensaje de error descriptivo en stderr y lanza
-     * std::runtime_error si:
+     * runtime_error si:
      *   a) size > 1 y (address % size) != 0  -> Error de alineacion
      *   b) address + size > MEM_SIZE          -> Acceso fuera de rango
      *
@@ -357,5 +359,5 @@ private:
 
     uint32_t             regs_[32]; ///< Registros de proposito general x0–x31.
     uint32_t             pc_;       ///< Program Counter.
-    std::vector<uint8_t> memory_;   ///< Memoria principal (MEM_SIZE bytes, byte-addressable).
+    vector<uint8_t> memory_;   ///< Memoria principal (MEM_SIZE bytes, byte-addressable).
 };

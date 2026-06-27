@@ -38,29 +38,29 @@ static int g_tests_failed = 0;
 
 // test() con diagnostico: muestra los valores got/expected al fallar.
 template <typename T>
-static void test(const std::string& name, T got, T expected)
+static void test(const string& name, T got, T expected)
 {
     ++g_tests_run;
     bool ok = (got == expected);
     if (ok) {
-        std::cout << "[PASS] " << name << "\n";
+        cout << "[PASS] " << name << "\n";
     } else {
         ++g_tests_failed;
-        std::cout << "[FAIL] " << name << "\n"
-                  << "         got      = 0x" << std::hex << std::setw(8)
-                  << std::setfill('0') << static_cast<uint32_t>(got)
-                  << "  (" << std::dec << static_cast<int32_t>(got) << ")\n"
-                  << "         expected = 0x" << std::hex << std::setw(8)
-                  << std::setfill('0') << static_cast<uint32_t>(expected)
-                  << "  (" << std::dec << static_cast<int32_t>(expected) << ")\n";
+        cout << "[FAIL] " << name << "\n"
+                  << "         got      = 0x" << hex << setw(8)
+                  << setfill('0') << static_cast<uint32_t>(got)
+                  << "  (" << dec << static_cast<int32_t>(got) << ")\n"
+                  << "         expected = 0x" << hex << setw(8)
+                  << setfill('0') << static_cast<uint32_t>(expected)
+                  << "  (" << dec << static_cast<int32_t>(expected) << ")\n";
     }
 }
 
 // Sobrecarga bool para tests sin valor numerico
-static void test(const std::string& name, bool ok)
+static void test(const string& name, bool ok)
 {
     ++g_tests_run;
-    std::cout << (ok ? "[PASS] " : "[FAIL] ") << name << "\n";
+    cout << (ok ? "[PASS] " : "[FAIL] ") << name << "\n";
     if (!ok) ++g_tests_failed;
 }
 
@@ -70,14 +70,14 @@ static void test(const std::string& name, bool ok)
 
 int main()
 {
-    std::cout << "=================================================================\n"
+    cout << "=================================================================\n"
               << " Tests del Simulador RISC-V RV32I  (Fase 1 + Fase 2)\n"
               << "=================================================================\n\n";
 
     // =========================================================================
     // FASE 1 -- Registros y memoria
     // =========================================================================
-    std::cout << "--- Fase 1: Registros y Memoria ---\n";
+    cout << "--- Fase 1: Registros y Memoria ---\n";
 
     Simulator sim;
 
@@ -114,19 +114,19 @@ int main()
     // T13-T14: Alineacion forzada
     {
         bool caught = false;
-        try { sim.read_word(0x1u); } catch (const std::runtime_error&) { caught = true; }
+        try { sim.read_word(0x1u); } catch (const runtime_error&) { caught = true; }
         test("T13  read_word en dir. no alineada lanza excepcion", caught);
     }
     {
         bool caught = false;
-        try { sim.read_halfword(0x3u); } catch (const std::runtime_error&) { caught = true; }
+        try { sim.read_halfword(0x3u); } catch (const runtime_error&) { caught = true; }
         test("T14  read_halfword en dir. no alineada lanza excepcion", caught);
     }
 
     // T15: Acceso fuera de rango
     {
         bool caught = false;
-        try { sim.read_word(Simulator::MEM_SIZE - 2u); } catch (const std::runtime_error&) { caught = true; }
+        try { sim.read_word(Simulator::MEM_SIZE - 2u); } catch (const runtime_error&) { caught = true; }
         test("T15  read_word fuera de rango lanza excepcion", caught);
     }
 
@@ -154,7 +154,7 @@ int main()
     //  Encoding: imm[31:20]=000000000001 rs1=00000 funct3=000 rd=00001 opcode=0010011
     //  = 0000_0000_0001_0000_0000_0000_1001_0011 = 0x00100093
     // =========================================================================
-    std::cout << "\n--- Fase 2a: Campos de instruccion ---\n";
+    cout << "\n--- Fase 2a: Campos de instruccion ---\n";
 
     // Instruccion: ADD x5, x6, x7 = 0x007302B3
     {
@@ -223,7 +223,7 @@ int main()
     // Los encodings se recalculan bit a bit en los comentarios para
     // que cualquier discrepancia sea auditable sin herramienta externa.
     // =========================================================================
-    std::cout << "\n--- Fase 2b: Inmediatos con sign-extension ---\n";
+    cout << "\n--- Fase 2b: Inmediatos con sign-extension ---\n";
 
     // -------------------------------------------------------------------------
     // Formato I  (imm[11:0] = instr[31:20])
@@ -241,7 +241,7 @@ int main()
     //  ADDI x1, x0, -2048  imm=0x800 (minimo negativo 12-bit)
     //  Encoding: 1000_0000_0000_0000_0000_0000_1001_0011 = 0x80000093
     // -------------------------------------------------------------------------
-    std::cout << "  [Formato I]\n";
+    cout << "  [Formato I]\n";
 
     test("T34  imm_I: ADDI x1,x0,+42   -> +42",
          Simulator::extract_imm_I(0x02A00093u), int32_t(42));
@@ -270,7 +270,7 @@ int main()
     //   [14:12]=010  [11:7]=11100  [6:0]=0100011
     //  = 1111_1110_0101_0011_0010_1110_0010_0011 = 0xFE532E23
     // -------------------------------------------------------------------------
-    std::cout << "  [Formato S]\n";
+    cout << "  [Formato S]\n";
 
     test("T38  imm_S: SW x5,8(x6)   -> +8",
          Simulator::extract_imm_S(0x00532423u), int32_t(8));
@@ -295,7 +295,7 @@ int main()
     //   [14:12]=000 [11:8]=1100 [7]=1 [6:0]=1100011
     //  = 1111_1110_0000_0000_0000_1100_1110_0011 = 0xFE000CE3
     // -------------------------------------------------------------------------
-    std::cout << "  [Formato B]\n";
+    cout << "  [Formato B]\n";
 
     test("T40  imm_B: BEQ x0,x0,+8  -> +8",
          Simulator::extract_imm_B(0x00000463u), int32_t(8));
@@ -316,7 +316,7 @@ int main()
     //   instr = 0xFFFFF000 | 0x80 | 0x37 = 0xFFFFF0B7
     //   extract_imm_U = (int32_t)0xFFFFF000 = -4096
     // -------------------------------------------------------------------------
-    std::cout << "  [Formato U]\n";
+    cout << "  [Formato U]\n";
 
     test("T42  imm_U: LUI x1,0x12345   -> 0x12345000 (positivo)",
          Simulator::extract_imm_U(0x123450B7u), int32_t(0x12345000));
@@ -342,7 +342,7 @@ int main()
     //   bits[23:20]=1001 (imm[3]=1 sets bit23, imm[2..1] sets bits22,21=0, bit20=1)
     //  = 1111_1111_1001_1111_1111_0000_0110_1111 = 0xFF9FF06F
     // -------------------------------------------------------------------------
-    std::cout << "  [Formato J]\n";
+    cout << "  [Formato J]\n";
 
     test("T44  imm_J: JAL x0,+8  -> +8",
          Simulator::extract_imm_J(0x0080006Fu), int32_t(8));
@@ -360,14 +360,14 @@ int main()
     // =========================================================================
     // FASE 2c -- Fetch y dispatch (step)
     // =========================================================================
-    std::cout << "\n--- Fase 2c: Fetch y dispatch (step) ---\n";
+    cout << "\n--- Fase 2c: Fetch y dispatch (step) ---\n";
 
     // T47: opcode ilegal (0x02 no existe en RV32I base) -> runtime_error
     {
         Simulator s;
         s.write_word(0x0u, 0x00000002u);  // opcode=0x02 (ilegal)
         bool caught = false;
-        try { s.step(); } catch (const std::runtime_error&) { caught = true; }
+        try { s.step(); } catch (const runtime_error&) { caught = true; }
         test("T47  step() con opcode ilegal (0x02) lanza runtime_error", caught);
     }
 
@@ -429,15 +429,15 @@ int main()
     // =========================================================================
     // Resumen
     // =========================================================================
-    std::cout << "\n=================================================================\n";
+    cout << "\n=================================================================\n";
     if (g_tests_failed == 0) {
-        std::cout << " [OK] " << g_tests_run << "/" << g_tests_run
+        cout << " [OK] " << g_tests_run << "/" << g_tests_run
                   << " tests pasaron correctamente.\n";
     } else {
-        std::cout << " [KO] " << g_tests_failed << " de " << g_tests_run
+        cout << " [KO] " << g_tests_failed << " de " << g_tests_run
                   << " tests FALLARON.\n";
         return 1;
     }
-    std::cout << "=================================================================\n";
+    cout << "=================================================================\n";
     return 0;
 }
