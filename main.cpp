@@ -57,7 +57,7 @@ int main(int argc, char* argv[])
         ss >> command;
 
         if (command == "exit") {
-            cout << "Saliendo del simulador...\n";
+            cout << "See you next time!\n";
             break;
         } 
         else if (command == "step") {
