@@ -28,7 +28,8 @@
  *   - Estado arquitectural (registros + PC)
  *   - Memoria flat de 1 MB con accesos little-endian y alineacion forzada
  *   - Cargador de archivos binarios crudos (.bin)
- *   - Stub del ciclo Fetch-Decode-Execute para la siguiente fase
+ *   - Ciclo Fetch + estructura de Decode (Fase 2)
+ *   - Ciclo Execute pendiente (Fase 3)
  */
 class Simulator {
 public:
@@ -55,6 +56,22 @@ public:
         "a6",   "a7",  "s2",  "s3",  "s4",  "s5",  "s6",  "s7",
         "s8",   "s9",  "s10", "s11", "t3",  "t4",  "t5",  "t6"
     };
+
+    // =========================================================================
+    // Opcodes base RV32I (bits [6:0] de la instruccion)
+    // =========================================================================
+
+    static constexpr uint32_t OP_LUI    = 0x37; ///< Load Upper Immediate
+    static constexpr uint32_t OP_AUIPC  = 0x17; ///< Add Upper Immediate to PC
+    static constexpr uint32_t OP_JAL    = 0x6F; ///< Jump And Link
+    static constexpr uint32_t OP_JALR   = 0x67; ///< Jump And Link Register
+    static constexpr uint32_t OP_BRANCH = 0x63; ///< Branches (BEQ, BNE, BLT, BGE, BLTU, BGEU)
+    static constexpr uint32_t OP_LOAD   = 0x03; ///< Loads  (LB, LH, LW, LBU, LHU)
+    static constexpr uint32_t OP_STORE  = 0x23; ///< Stores (SB, SH, SW)
+    static constexpr uint32_t OP_ALUI   = 0x13; ///< ALU Inmediata (ADDI, SLTI, XORI, ORI, ANDI, SLLI, SRLI, SRAI)
+    static constexpr uint32_t OP_ALU    = 0x33; ///< ALU Registro  (ADD, SUB, SLL, SLT, XOR, SRL, SRA, OR, AND)
+    static constexpr uint32_t OP_FENCE  = 0x0F; ///< FENCE (barrera de memoria)
+    static constexpr uint32_t OP_SYSTEM = 0x73; ///< ECALL / EBREAK / CSR
 
     // =========================================================================
     // Constructor
@@ -91,11 +108,26 @@ public:
     // =========================================================================
 
     /**
-     * @brief [STUB] Ejecuta un ciclo Fetch-Decode-Execute.
+     * @brief Lee la instruccion de 32 bits desde la memoria en la direccion pc_.
      *
-     * En esta fase, la funcion solo imprime un mensaje indicando que no esta
-     * implementada. La logica completa (fetch, decode, execute) se añadira
-     * en la siguiente entrega.
+     * Utiliza read_word(pc_) internamente. No modifica el PC.
+     *
+     * @return Instruccion de 32 bits en formato little-endian reconstruido.
+     * @throws std::runtime_error si pc_ esta fuera de rango o no alineado.
+     */
+    uint32_t fetch();
+
+    /**
+     * @brief Ejecuta un ciclo Fetch-Decode-Execute.
+     *
+     * Secuencia:
+     *   1. fetch()     — lee instruccion en pc_
+     *   2. pc_ += 4   — avanza al siguiente word
+     *   3. Extrae opcode
+     *   4. switch(opcode) — despacha a la familia de instrucciones
+     *
+     * Las familias individuales (Execute) se implementan en la Fase 3.
+     * Un opcode desconocido lanza std::runtime_error.
      */
     void step();
 
@@ -206,18 +238,111 @@ public:
      */
     void write_word(uint32_t address, uint32_t val);
 
+    // =========================================================================
+    // Decode utilities -- extraccion de campos e inmediatos
+    // =========================================================================
+    // Funciones estaticas y puras: no acceden al estado del simulador.
+    // Se exponen como publicas para permitir pruebas unitarias directas.
+
+    /**
+     * @brief Extrae el opcode: bits [6:0].
+     * @param instr Instruccion de 32 bits.
+     * @return Opcode de 7 bits.
+     */
+    static uint32_t get_opcode(uint32_t instr);
+
+    /**
+     * @brief Extrae el registro destino rd: bits [11:7].
+     * @param instr Instruccion de 32 bits.
+     * @return Indice de registro (0-31).
+     */
+    static uint8_t get_rd(uint32_t instr);
+
+    /**
+     * @brief Extrae funct3: bits [14:12].
+     * @param instr Instruccion de 32 bits.
+     * @return Campo funct3 de 3 bits.
+     */
+    static uint32_t get_funct3(uint32_t instr);
+
+    /**
+     * @brief Extrae el registro fuente rs1: bits [19:15].
+     * @param instr Instruccion de 32 bits.
+     * @return Indice de registro (0-31).
+     */
+    static uint8_t get_rs1(uint32_t instr);
+
+    /**
+     * @brief Extrae el registro fuente rs2: bits [24:20].
+     * @param instr Instruccion de 32 bits.
+     * @return Indice de registro (0-31).
+     */
+    static uint8_t get_rs2(uint32_t instr);
+
+    /**
+     * @brief Extrae funct7: bits [31:25].
+     * @param instr Instruccion de 32 bits.
+     * @return Campo funct7 de 7 bits.
+     */
+    static uint32_t get_funct7(uint32_t instr);
+
+    /**
+     * @brief Inmediato formato I: instr[31:20], sign-extended a 32 bits.
+     *
+     * Usos: ADDI, SLTI, XORI, ORI, ANDI, SLLI, SRLI, SRAI, JALR, Loads.
+     *
+     *  31      20 19   15 14 12 11    7 6       0
+     *  [ imm[11:0] ][ rs1 ][fn3][ rd  ][ opcode ]
+     */
+    static int32_t extract_imm_I(uint32_t instr);
+
+    /**
+     * @brief Inmediato formato S: instr[31:25|11:7], sign-extended a 32 bits.
+     *
+     * Usos: SB, SH, SW.
+     *
+     *  31    25 24  20 19  15 14 12 11    7 6       0
+     *  [imm[11:5]][ rs2 ][ rs1 ][fn3][imm[4:0]][ opcode ]
+     */
+    static int32_t extract_imm_S(uint32_t instr);
+
+    /**
+     * @brief Inmediato formato B: branches, sign-extended a 32 bits.
+     *
+     * Usos: BEQ, BNE, BLT, BGE, BLTU, BGEU.
+     *
+     * Bits dispersos: instr[31]=imm[12], instr[30:25]=imm[10:5],
+     *                 instr[11:8]=imm[4:1],  instr[7]=imm[11].
+     */
+    static int32_t extract_imm_B(uint32_t instr);
+
+    /**
+     * @brief Inmediato formato U: instr[31:12] en bits [31:12], bits [11:0]=0.
+     *
+     * Usos: LUI, AUIPC.
+     */
+    static int32_t extract_imm_U(uint32_t instr);
+
+    /**
+     * @brief Inmediato formato J: saltos JAL, sign-extended a 32 bits.
+     *
+     * Bits dispersos: instr[31]=imm[20], instr[30:21]=imm[10:1],
+     *                 instr[20]=imm[11],  instr[19:12]=imm[19:12].
+     */
+    static int32_t extract_imm_J(uint32_t instr);
+
 private:
     // =========================================================================
-    // Helper interno
+    // Helper de acceso a memoria
     // =========================================================================
 
     /**
-     * @brief Valida alineacion y límites antes de cualquier acceso a memoria.
+     * @brief Valida alineacion y limites antes de cualquier acceso a memoria.
      *
      * Imprime un mensaje de error descriptivo en stderr y lanza
      * std::runtime_error si:
-     *   a) size > 1 y (address % size) != 0  → Error de alineacion
-     *   b) address + size > MEM_SIZE          → Acceso fuera de rango
+     *   a) size > 1 y (address % size) != 0  -> Error de alineacion
+     *   b) address + size > MEM_SIZE          -> Acceso fuera de rango
      *
      * @param address    Direccion de inicio del acceso.
      * @param size       Ancho del acceso en bytes (1, 2 o 4).
