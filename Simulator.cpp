@@ -701,7 +701,7 @@ void Simulator::print_state() const
     const auto fill_char = cout.fill();
 
     cout << "=============================================================\n"
-              << "  SIMULADOR RISC-V RV32I — Estado Actual\n"
+              << "  SIMULADOR RISC-V RV32I - Estado Actual\n"
               << "=============================================================\n"
               << "  PC  : 0x"
               << hex << setw(8) << setfill('0') << pc_
