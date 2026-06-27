@@ -1,11 +1,11 @@
 // =============================================================================
-// main.cpp — Punto de entrada temporal del Simulador RISC-V RV32I
+// main.cpp — Punto de entrada interactivo del Simulador RISC-V RV32I
 // =============================================================================
 // Uso:
-//   ./simulator <archivo.bin>
+//   ./riscv_sim.exe <archivo.bin>
 //
-// Carga el archivo binario crudo en el simulador y muestra el estado
-// inicial (PC + registros) para verificar la carga.
+// Carga el archivo binario crudo y abre una terminal interactiva para
+// ejecutar paso a paso (step), ver registros (regs) o memoria (mem).
 //
 // Estandar: C++17
 // =============================================================================
@@ -15,11 +15,14 @@
 #include <cstdlib>     // EXIT_SUCCESS, EXIT_FAILURE
 #include <iostream>    // std::cerr, std::cout
 #include <stdexcept>   // std::runtime_error, std::exception
+#include <string>      // std::string
+#include <sstream>     // std::stringstream
+#include <iomanip>     // std::hex, std::dec
 
 int main(int argc, char* argv[])
 {
     // -------------------------------------------------------------------------
-    // Validar argumentos de línea de comandos
+    // Validar argumentos de linea de comandos
     // -------------------------------------------------------------------------
     if (argc < 2) {
         std::cerr << "Error: se requiere un archivo binario como argumento.\n"
@@ -29,33 +32,82 @@ int main(int argc, char* argv[])
     }
 
     // -------------------------------------------------------------------------
-    // Crear el simulador (estado limpio: registros=0, PC=0x0, memoria=0)
+    // Crear el simulador y cargar el archivo
     // -------------------------------------------------------------------------
     Simulator sim;
 
-    // -------------------------------------------------------------------------
-    // Cargar el binario en memoria desde la direccion 0x00000000
-    // -------------------------------------------------------------------------
     if (!sim.load_from_file(argv[1])) {
         // load_from_file ya imprimio el mensaje de error
         return EXIT_FAILURE;
     }
 
+    std::cout << "[LOAD OK] \"" << argv[1] << "\" listo para ejecucion.\n";
+    std::cout << "Comandos: 'step' (avanzar), 'regs' (registros), 'mem <hex>' (memoria), 'exit' (salir)\n\n";
+
     // -------------------------------------------------------------------------
-    // Mostrar el estado del simulador tras la carga
+    // Bucle interactivo REPL (Read-Eval-Print Loop)
     // -------------------------------------------------------------------------
-    try {
-        sim.print_state();
-    }
-    catch (const std::runtime_error& e) {
-        // Error de alineacion o acceso fuera de rango durante print_state
-        // (no debería ocurrir en esta fase, pero se captura por seguridad)
-        std::cerr << "\n[RUNTIME ERROR] " << e.what() << "\n";
-        return EXIT_FAILURE;
-    }
-    catch (const std::exception& e) {
-        std::cerr << "\n[ERROR] " << e.what() << "\n";
-        return EXIT_FAILURE;
+    std::string line;
+    while (true) {
+        std::cout << "> ";
+        if (!std::getline(std::cin, line)) break; // Maneja EOF (Ctrl+D / Ctrl+Z)
+
+        std::stringstream ss(line);
+        std::string command;
+        ss >> command;
+
+        if (command == "exit") {
+            std::cout << "Saliendo del simulador...\n";
+            break;
+        } 
+        else if (command == "step") {
+            try {
+                sim.step();
+                std::cout << "Instruccion ejecutada.\n";
+            } 
+            catch (const std::exception& e) {
+                std::cerr << "[RUNTIME ERROR] " << e.what() << "\n";
+                std::cerr << "La simulacion se ha detenido debido a una excepcion.\n";
+                break; // Rompe el bucle si hay un error fatal (ej. mem fault)
+            }
+        } 
+        else if (command == "regs") {
+            sim.print_state();
+        } 
+        else if (command == "mem") {
+            uint32_t addr;
+            // Lee la direccion en formato hexadecimal (sin necesidad del 0x)
+            if (ss >> std::hex >> addr) {
+                try {
+                    // Muestra 4 bytes (1 word) leidos desde la memoria
+                    uint32_t val = sim.read_word(addr);
+                    std::cout << "Memoria [0x" << std::hex << addr << "]: 0x" 
+                              << std::setfill('0') << std::setw(8) << val << std::dec << "\n";
+                } catch (const std::exception& e) {
+                    std::cerr << "[MEM ERROR] " << e.what() << "\n";
+                }
+            } else {
+                std::cout << "Uso: mem <direccion_hex> (ej. mem 64 para la direccion 0x64)\n";
+            }
+        }
+        else if (!command.empty()) {
+            std::cout << "Comando desconocido.\n";
+        }
+        else if (command == "run") {
+            std::cout << "Ejecutando programa continuamente...\n";
+            uint64_t instrucciones_ejecutadas = 0;
+            try {
+                // Ejecuta en bucle hasta que salte una excepción de halt o instrucción inválida
+                while (true) {
+                    sim.step();
+                    instrucciones_ejecutadas++;
+                }
+            } 
+            catch (const std::exception& e) {
+                std::cout << "\nSimulacion finalizada tras " << instrucciones_ejecutadas << " instrucciones.\n";
+                std::cout << "Razon/Estado: " << e.what() << "\n";
+            }
+        }
     }
 
     return EXIT_SUCCESS;
