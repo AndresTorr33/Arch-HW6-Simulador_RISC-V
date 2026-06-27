@@ -385,118 +385,291 @@ void Simulator::step()
     switch (opcode) {
 
         // -----------------------------------------------------------------
-        // Tipo U — Load Upper Immediate
-        // LUI rd, imm  ->  rd = imm << 12
+        // LUI — Load Upper Immediate
+        // rd = imm_U  (imm ya tiene ceros en bits [11:0])
         // -----------------------------------------------------------------
         case OP_LUI: {
-            // TODO (Fase 3): set_reg(rd, static_cast<uint32_t>(extract_imm_U(instr)));
-            (void)rd;
+            const int32_t imm = extract_imm_U(instr);
+            set_reg(rd, static_cast<uint32_t>(imm));
             break;
         }
 
         // -----------------------------------------------------------------
-        // Tipo U — Add Upper Immediate to PC
-        // AUIPC rd, imm  ->  rd = pc_ + (imm << 12)
+        // AUIPC — Add Upper Immediate to PC
+        // rd = (PC de esta instruccion) + imm_U
         // -----------------------------------------------------------------
         case OP_AUIPC: {
-            // TODO (Fase 3): set_reg(rd, (pc_ - 4) + static_cast<uint32_t>(extract_imm_U(instr)));
-            (void)rd;
+            const int32_t  imm     = extract_imm_U(instr);
+            const uint32_t this_pc = pc_ - 4u;
+            set_reg(rd, this_pc + static_cast<uint32_t>(imm));
             break;
         }
 
         // -----------------------------------------------------------------
-        // Tipo J — Jump And Link
-        // JAL rd, imm  ->  rd = pc_ ; pc_ = (pc_-4) + imm
+        // JAL — Jump And Link
+        // rd  = PC+4 ; PC = (PC de esta instruccion) + imm_J
         // -----------------------------------------------------------------
         case OP_JAL: {
-            // TODO (Fase 3): implementar salto incondicional
-            (void)rd;
+            const int32_t  imm      = extract_imm_J(instr);
+            const uint32_t ret_addr = pc_;         // pc_ ya es PC+4
+            const uint32_t this_pc  = pc_ - 4u;
+            set_reg(rd, ret_addr);
+            pc_ = this_pc + static_cast<uint32_t>(imm);
             break;
         }
 
         // -----------------------------------------------------------------
-        // Tipo I — Jump And Link Register
-        // JALR rd, rs1, imm  ->  rd = pc_ ; pc_ = (rs1 + imm) & ~1
+        // JALR — Jump And Link Register
+        // rd  = PC+4 ; PC = (rs1 + imm_I) & ~1
         // -----------------------------------------------------------------
         case OP_JALR: {
-            // TODO (Fase 3): implementar salto indirecto
-            (void)rd; (void)rs1; (void)funct3;
+            const int32_t  imm      = extract_imm_I(instr);
+            const uint32_t ret_addr = pc_;         // pc_ ya es PC+4
+            const uint32_t target   = (regs_[rs1] + static_cast<uint32_t>(imm)) & ~1u;
+            set_reg(rd, ret_addr);
+            pc_ = target;
             break;
         }
 
         // -----------------------------------------------------------------
-        // Tipo B — Branches condicionales
-        // BEQ | BNE | BLT | BGE | BLTU | BGEU
-        // Diferenciados por funct3.
+        // Branches — BEQ, BNE, BLT, BGE, BLTU, BGEU
+        // Si condicion se cumple: PC = (PC de esta instruccion) + imm_B
         // -----------------------------------------------------------------
         case OP_BRANCH: {
-            // TODO (Fase 3): evaluar condicion y actualizar pc_ si se cumple
-            (void)rs1; (void)rs2; (void)funct3;
+            const int32_t  imm     = extract_imm_B(instr);
+            const uint32_t this_pc = pc_ - 4u;
+            const int32_t  vs1 = static_cast<int32_t>(regs_[rs1]);
+            const int32_t  vs2 = static_cast<int32_t>(regs_[rs2]);
+            const uint32_t vu1 = regs_[rs1];
+            const uint32_t vu2 = regs_[rs2];
+
+            bool taken = false;
+            switch (funct3) {
+                case 0x0: taken = (vu1 == vu2); break;  // BEQ
+                case 0x1: taken = (vu1 != vu2); break;  // BNE
+                case 0x4: taken = (vs1 <  vs2); break;  // BLT  (signed)
+                case 0x5: taken = (vs1 >= vs2); break;  // BGE  (signed)
+                case 0x6: taken = (vu1 <  vu2); break;  // BLTU (unsigned)
+                case 0x7: taken = (vu1 >= vu2); break;  // BGEU (unsigned)
+                default: {
+                    std::ostringstream oss;
+                    oss << "\n[ILLEGAL INSTRUCTION] BRANCH funct3 desconocido\n"
+                        << "  PC     : 0x" << std::hex << std::setw(8)
+                        << std::setfill('0') << this_pc << "\n"
+                        << "  funct3 : 0x" << funct3 << "\n"
+                        << "  -> La simulacion se detiene.";
+                    std::cerr << oss.str() << "\n";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            if (taken) {
+                pc_ = this_pc + static_cast<uint32_t>(imm);
+            }
             break;
         }
 
         // -----------------------------------------------------------------
-        // Tipo I — Loads
-        // LB | LH | LW | LBU | LHU
-        // Diferenciados por funct3.
+        // Loads — LB, LH, LW, LBU, LHU
+        // addr = rs1 + imm_I ;  LB/LH aplican sign-extension
         // -----------------------------------------------------------------
         case OP_LOAD: {
-            // TODO (Fase 3): leer de memoria y escribir en rd
-            (void)rd; (void)rs1; (void)funct3;
+            const int32_t  imm  = extract_imm_I(instr);
+            const uint32_t addr = regs_[rs1] + static_cast<uint32_t>(imm);
+            uint32_t result = 0u;
+            switch (funct3) {
+                case 0x0: {  // LB — sign-extended byte
+                    result = static_cast<uint32_t>(
+                                 static_cast<int32_t>(
+                                     static_cast<int8_t>(read_byte(addr))));
+                    break;
+                }
+                case 0x1: {  // LH — sign-extended halfword
+                    result = static_cast<uint32_t>(
+                                 static_cast<int32_t>(
+                                     static_cast<int16_t>(read_halfword(addr))));
+                    break;
+                }
+                case 0x2:    // LW
+                    result = read_word(addr);
+                    break;
+                case 0x4:    // LBU — zero-extended byte
+                    result = static_cast<uint32_t>(read_byte(addr));
+                    break;
+                case 0x5:    // LHU — zero-extended halfword
+                    result = static_cast<uint32_t>(read_halfword(addr));
+                    break;
+                default: {
+                    std::ostringstream oss;
+                    oss << "\n[ILLEGAL INSTRUCTION] LOAD funct3 desconocido\n"
+                        << "  PC     : 0x" << std::hex << std::setw(8)
+                        << std::setfill('0') << (pc_ - 4u) << "\n"
+                        << "  funct3 : 0x" << funct3 << "\n"
+                        << "  -> La simulacion se detiene.";
+                    std::cerr << oss.str() << "\n";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            set_reg(rd, result);
             break;
         }
 
         // -----------------------------------------------------------------
-        // Tipo S — Stores
-        // SB | SH | SW
-        // Diferenciados por funct3.
+        // Stores — SB, SH, SW
+        // addr = rs1 + imm_S ; mem[addr] = rs2[ancho]
         // -----------------------------------------------------------------
         case OP_STORE: {
-            // TODO (Fase 3): escribir rs2 en memoria[rs1 + imm_S]
-            (void)rs1; (void)rs2; (void)funct3;
+            const int32_t  imm  = extract_imm_S(instr);
+            const uint32_t addr = regs_[rs1] + static_cast<uint32_t>(imm);
+            const uint32_t src  = regs_[rs2];
+            switch (funct3) {
+                case 0x0:
+                    write_byte(addr, static_cast<uint8_t>(src & 0xFFu));
+                    break;
+                case 0x1:
+                    write_halfword(addr, static_cast<uint16_t>(src & 0xFFFFu));
+                    break;
+                case 0x2:
+                    write_word(addr, src);
+                    break;
+                default: {
+                    std::ostringstream oss;
+                    oss << "\n[ILLEGAL INSTRUCTION] STORE funct3 desconocido\n"
+                        << "  PC     : 0x" << std::hex << std::setw(8)
+                        << std::setfill('0') << (pc_ - 4u) << "\n"
+                        << "  funct3 : 0x" << funct3 << "\n"
+                        << "  -> La simulacion se detiene.";
+                    std::cerr << oss.str() << "\n";
+                    throw std::runtime_error(oss.str());
+                }
+            }
             break;
         }
 
         // -----------------------------------------------------------------
-        // Tipo I — ALU con inmediato
-        // ADDI | SLTI | SLTIU | XORI | ORI | ANDI | SLLI | SRLI | SRAI
-        // Diferenciados por funct3 (y funct7 para shifts).
+        // ALU con Inmediato — ADDI, SLTI, SLTIU, XORI, ORI, ANDI,
+        //                      SLLI, SRLI, SRAI
         // -----------------------------------------------------------------
         case OP_ALUI: {
-            // TODO (Fase 3): ejecutar operacion ALU con inmediato I
-            (void)rd; (void)rs1; (void)funct3; (void)funct7;
+            const int32_t  imm = extract_imm_I(instr);
+            const int32_t  vs1 = static_cast<int32_t>(regs_[rs1]);
+            const uint32_t vu1 = regs_[rs1];
+            uint32_t result = 0u;
+            switch (funct3) {
+                case 0x0:   // ADDI
+                    result = static_cast<uint32_t>(vs1 + imm);
+                    break;
+                case 0x2:   // SLTI — signed
+                    result = (vs1 < imm) ? 1u : 0u;
+                    break;
+                case 0x3:   // SLTIU — unsigned (inmediato sign-extended, comp. unsigned)
+                    result = (vu1 < static_cast<uint32_t>(imm)) ? 1u : 0u;
+                    break;
+                case 0x4:   // XORI
+                    result = vu1 ^ static_cast<uint32_t>(imm);
+                    break;
+                case 0x6:   // ORI
+                    result = vu1 | static_cast<uint32_t>(imm);
+                    break;
+                case 0x7:   // ANDI
+                    result = vu1 & static_cast<uint32_t>(imm);
+                    break;
+                case 0x1:   // SLLI
+                    result = vu1 << (static_cast<uint32_t>(imm) & 0x1Fu);
+                    break;
+                case 0x5: { // SRLI (funct7[5]=0) / SRAI (funct7[5]=1)
+                    const uint32_t shamt = static_cast<uint32_t>(imm) & 0x1Fu;
+                    result = (funct7 & 0x20u)
+                             ? static_cast<uint32_t>(vs1 >> shamt)   // SRAI
+                             : vu1 >> shamt;                          // SRLI
+                    break;
+                }
+                default: {
+                    std::ostringstream oss;
+                    oss << "\n[ILLEGAL INSTRUCTION] ALU-I funct3 desconocido\n"
+                        << "  PC     : 0x" << std::hex << std::setw(8)
+                        << std::setfill('0') << (pc_ - 4u) << "\n"
+                        << "  funct3 : 0x" << funct3 << "\n"
+                        << "  -> La simulacion se detiene.";
+                    std::cerr << oss.str() << "\n";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            set_reg(rd, result);
             break;
         }
 
         // -----------------------------------------------------------------
-        // Tipo R — ALU registro a registro
-        // ADD | SUB | SLL | SLT | SLTU | XOR | SRL | SRA | OR | AND
-        // Diferenciados por funct3 + funct7.
+        // ALU Registro-Registro — ADD, SUB, SLL, SLT, SLTU, XOR,
+        //                          SRL, SRA, OR, AND
+        // Diferenciados por funct3 + bit 30 de funct7 (flag 'alt').
         // -----------------------------------------------------------------
         case OP_ALU: {
-            // TODO (Fase 3): ejecutar operacion ALU entre registros
-            (void)rd; (void)rs1; (void)rs2; (void)funct3; (void)funct7;
+            const int32_t  vs1 = static_cast<int32_t>(regs_[rs1]);
+            const int32_t  vs2 = static_cast<int32_t>(regs_[rs2]);
+            const uint32_t vu1 = regs_[rs1];
+            const uint32_t vu2 = regs_[rs2];
+            const bool     alt = (funct7 & 0x20u) != 0u;  // bit30: SUB, SRA
+
+            uint32_t result = 0u;
+            switch (funct3) {
+                case 0x0:   // ADD (alt=0) / SUB (alt=1)
+                    result = alt
+                             ? static_cast<uint32_t>(vs1 - vs2)
+                             : static_cast<uint32_t>(vs1 + vs2);
+                    break;
+                case 0x1:   // SLL — Shift Left Logical
+                    result = vu1 << (vu2 & 0x1Fu);
+                    break;
+                case 0x2:   // SLT — signed less-than
+                    result = (vs1 < vs2) ? 1u : 0u;
+                    break;
+                case 0x3:   // SLTU — unsigned less-than
+                    result = (vu1 < vu2) ? 1u : 0u;
+                    break;
+                case 0x4:   // XOR
+                    result = vu1 ^ vu2;
+                    break;
+                case 0x5:   // SRL (alt=0) / SRA (alt=1)
+                    result = alt
+                             ? static_cast<uint32_t>(vs1 >> (vu2 & 0x1Fu))
+                             : vu1 >> (vu2 & 0x1Fu);
+                    break;
+                case 0x6:   // OR
+                    result = vu1 | vu2;
+                    break;
+                case 0x7:   // AND
+                    result = vu1 & vu2;
+                    break;
+                default: {
+                    std::ostringstream oss;
+                    oss << "\n[ILLEGAL INSTRUCTION] ALU-R funct3 desconocido\n"
+                        << "  PC     : 0x" << std::hex << std::setw(8)
+                        << std::setfill('0') << (pc_ - 4u) << "\n"
+                        << "  funct3 : 0x" << funct3 << "\n"
+                        << "  -> La simulacion se detiene.";
+                    std::cerr << oss.str() << "\n";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            set_reg(rd, result);
             break;
         }
 
         // -----------------------------------------------------------------
         // FENCE — barrera de ordenacion de memoria
-        // En un simulador de ejecucion en orden se puede tratar como NOP.
+        // En un simulador de ejecucion en orden (in-order, single-thread)
+        // se trata como NOP; no hay reordenamiento que serializar.
         // -----------------------------------------------------------------
-        case OP_FENCE: {
-            // TODO (Fase 3): NOP o modelar barrera si se necesita
+        case OP_FENCE:
             break;
-        }
 
         // -----------------------------------------------------------------
-        // SYSTEM — ECALL, EBREAK, instrucciones CSR
-        // Diferenciados por funct3 y el campo imm[11:0].
+        // SYSTEM — ECALL, EBREAK
+        // Fase 3: tratados como NOP (sin soporte de sistema operativo).
+        // Se pueden extender para emular syscalls en fases posteriores.
         // -----------------------------------------------------------------
-        case OP_SYSTEM: {
-            // TODO (Fase 3): manejar llamadas al sistema y CSR
-            (void)rd; (void)rs1; (void)funct3;
+        case OP_SYSTEM:
             break;
-        }
 
         // -----------------------------------------------------------------
         // Opcode desconocido o instruccion ilegal
@@ -510,7 +683,7 @@ void Simulator::step()
                 << std::setw(8) << std::setfill('0') << instr << "\n"
                 << "  Opcode               : 0x"
                 << std::setw(2) << std::setfill('0') << opcode << "\n"
-                << "  → La simulacion se detiene.";
+                << "  -> La simulacion se detiene.";
             std::cerr << oss.str() << "\n";
             throw std::runtime_error(oss.str());
         }
