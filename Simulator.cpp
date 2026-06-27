@@ -1,16 +1,4 @@
-// =============================================================================
 // Simulator.cpp — Implementacion del Simulador RISC-V RV32I
-// =============================================================================
-// Implementa todos los metodos declarados en Simulator.hpp.
-//
-// Decisiones de diseno:
-//   - Memoria little-endian construida byte a byte (portable, sin UB).
-//   - Alineacion forzada: error explicito + excepcion en accesos no alineados.
-//   - Regla de Oro: set_reg() ignora silenciosamente escrituras a x0.
-//   - Sign-extension via cast a int32_t + corrimiento aritmetico derecho.
-//
-// Estandar: C++17
-// =============================================================================
 
 #include "Simulator.hpp"
 
@@ -21,10 +9,6 @@
 #include <sstream>      // ostringstream
 #include <stdexcept>    // runtime_error, out_of_range
 
-// =============================================================================
-// Constructor
-// =============================================================================
-
 Simulator::Simulator()
     : pc_(0x00000000u),
       memory_(MEM_SIZE, 0u)   // Inicializar toda la memoria a 0
@@ -33,9 +17,7 @@ Simulator::Simulator()
     fill(begin(regs_), end(regs_), 0u);
 }
 
-// =============================================================================
 // Helper: check_access — Alineacion y límites
-// =============================================================================
 
 void Simulator::check_access(uint32_t address, uint8_t size, const char* operation) const
 {
@@ -57,7 +39,6 @@ void Simulator::check_access(uint32_t address, uint8_t size, const char* operati
     }
 
     // --- Verificacion de límites de memoria ---
-    // Se usa uint64_t para evitar overflow al sumar address + size
     if (static_cast<uint64_t>(address) + size > static_cast<uint64_t>(MEM_SIZE)) {
         ostringstream oss;
         oss << "\n[OUT OF BOUNDS] " << operation << "()\n"
@@ -72,9 +53,7 @@ void Simulator::check_access(uint32_t address, uint8_t size, const char* operati
     }
 }
 
-// =============================================================================
 // Acceso a registros
-// =============================================================================
 
 uint32_t Simulator::get_reg(uint8_t idx) const
 {
@@ -94,16 +73,12 @@ void Simulator::set_reg(uint8_t idx, uint32_t val)
             + to_string(idx) + " (maximo: 31)");
     }
 
-    // Regla de Oro RISC-V: x0 es hardwired a 0.
-    // Cualquier intento de escritura se descarta silenciosamente.
     if (idx != 0) {
         regs_[idx] = val;
     }
 }
 
-// =============================================================================
 // Lectura de memoria — little-endian
-// =============================================================================
 
 uint8_t Simulator::read_byte(uint32_t address) const
 {
@@ -115,9 +90,6 @@ uint16_t Simulator::read_halfword(uint32_t address) const
 {
     check_access(address, 2, "read_halfword");
 
-    //  Direccion : address+0  |  address+1
-    //  Bits      : [7:0]      |  [15:8]
-    //  (little-endian: el byte en la direccion mas baja es el menos significativo)
     return   static_cast<uint16_t>(memory_[address])
            | static_cast<uint16_t>(memory_[address + 1]) << 8;
 }
@@ -126,18 +98,13 @@ uint32_t Simulator::read_word(uint32_t address) const
 {
     check_access(address, 4, "read_word");
 
-    //  Direccion : address+0  |  address+1  |  address+2  |  address+3
-    //  Bits      : [7:0]      |  [15:8]     |  [23:16]    |  [31:24]
-    //  (little-endian: LSB en la direccion mas baja)
     return   static_cast<uint32_t>(memory_[address])
            | static_cast<uint32_t>(memory_[address + 1]) <<  8
            | static_cast<uint32_t>(memory_[address + 2]) << 16
            | static_cast<uint32_t>(memory_[address + 3]) << 24;
 }
 
-// =============================================================================
 // Escritura de memoria — little-endian
-// =============================================================================
 
 void Simulator::write_byte(uint32_t address, uint8_t val)
 {
@@ -165,9 +132,7 @@ void Simulator::write_word(uint32_t address, uint32_t val)
     memory_[address + 3] = static_cast<uint8_t>((val >> 24) & 0xFF); // bits [31:24]
 }
 
-// =============================================================================
 // Cargador de archivos binarios
-// =============================================================================
 
 bool Simulator::load_from_file(const string& filename)
 {
@@ -216,9 +181,7 @@ bool Simulator::load_from_file(const string& filename)
     return true;
 }
 
-// =============================================================================
 // Fetch
-// =============================================================================
 
 uint32_t Simulator::fetch()
 {
@@ -226,9 +189,7 @@ uint32_t Simulator::fetch()
     return read_word(pc_);
 }
 
-// =============================================================================
 // Helpers de decodificacion — extraccion de campos
-// =============================================================================
 
 // opcode : bits [6:0]
 uint32_t Simulator::get_opcode(uint32_t instr) {
@@ -260,41 +221,20 @@ uint32_t Simulator::get_funct7(uint32_t instr) {
     return (instr >> 25) & 0x7Fu;
 }
 
-// =============================================================================
 // Extractores de inmediatos con sign-extension
-// =============================================================================
-//
-// Estrategia de sign-extension:
-//   Se construye el inmediato como uint32_t con el bit de signo en la posicion
-//   correcta, luego se castea a int32_t y se aplica corrimiento aritmetico
-//   derecho para propagar el signo a todos los bits superiores.
-//   El corrimiento aritmetico en int32_t negativo esta definido como
-//   implementation-defined en C++, pero en todas las plataformas modernas
-//   (x86, ARM, RISC-V) es aritmetico (replica el bit de signo). C++20 lo
-//   estandariza formalmente; en C++17 es seguro en la practica.
 
 // Formato I: imm[11:0] = instr[31:20]
-// El bit de signo es instr[31] = imm[11].
 int32_t Simulator::extract_imm_I(uint32_t instr)
 {
-    // Desplazamos el campo a la posicion mas alta y luego aritmeticamente
-    // a la derecha para que el signo se propague.
-    //   instr[31:20] -> colocar en [31:20] via << 0 ya esta; necesitamos
-    //   llevar imm[11] a bit31 del int32_t.
     return static_cast<int32_t>(instr) >> 20;  // SAR 20: imm[11] -> bit31
 }
 
 // Formato S: imm[11:5] = instr[31:25], imm[4:0] = instr[11:7]
-// Bit de signo: instr[31] = imm[11].
 int32_t Simulator::extract_imm_S(uint32_t instr)
 {
-    // Reconstruir el inmediato de 12 bits en un uint32_t:
-    //   bits [11:5] provienen de instr[31:25]
-    //   bits [4:0]  provienen de instr[11:7]
-    const uint32_t imm_upper = (instr >> 25) & 0x7Fu;  // 7 bits -> posicion [6:0]
-    const uint32_t imm_lower = (instr >>  7) & 0x1Fu;  // 5 bits -> posicion [4:0]
+    const uint32_t imm_upper = (instr >> 25) & 0x7Fu; 
+    const uint32_t imm_lower = (instr >>  7) & 0x1Fu; 
 
-    // Ensamblar en un uint32_t con el campo en bits [11:0]
     const uint32_t raw = (imm_upper << 5) | imm_lower;
 
     // Sign-extend desde bit 11: desplazar a bit31 y volver con SAR
@@ -302,11 +242,6 @@ int32_t Simulator::extract_imm_S(uint32_t instr)
 }
 
 // Formato B: bits dispersos, offset de 2 bytes (imm[0] = 0 implicito)
-//   imm[12]   = instr[31]
-//   imm[10:5] = instr[30:25]
-//   imm[4:1]  = instr[11:8]
-//   imm[11]   = instr[7]
-// Bit de signo: instr[31] = imm[12].
 int32_t Simulator::extract_imm_B(uint32_t instr)
 {
     const uint32_t bit12  = (instr >> 31) & 0x1u;   // imm[12]
@@ -325,8 +260,6 @@ int32_t Simulator::extract_imm_B(uint32_t instr)
 }
 
 // Formato U: los 20 bits superiores son el inmediato, bits [11:0] = 0.
-// Se usa directamente como valor de 32 bits; no necesita sign-extension
-// adicional porque ya ocupa los bits [31:12].
 int32_t Simulator::extract_imm_U(uint32_t instr)
 {
     // Limpiar los 12 bits inferiores (opcode + rd)
@@ -334,12 +267,6 @@ int32_t Simulator::extract_imm_U(uint32_t instr)
 }
 
 // Formato J: bits dispersos para JAL
-//   imm[20]    = instr[31]
-//   imm[10:1]  = instr[30:21]
-//   imm[11]    = instr[20]
-//   imm[19:12] = instr[19:12]
-//   imm[0]     = 0 (siempre)
-// Bit de signo: instr[31] = imm[20].
 int32_t Simulator::extract_imm_J(uint32_t instr)
 {
     const uint32_t bit20    = (instr >> 31) & 0x1u;   // imm[20]
@@ -357,9 +284,7 @@ int32_t Simulator::extract_imm_J(uint32_t instr)
     return static_cast<int32_t>(raw << 11) >> 11;
 }
 
-// =============================================================================
 // Ciclo de ejecucion — Fetch + Decode
-// =============================================================================
 
 void Simulator::step()
 {
@@ -367,14 +292,11 @@ void Simulator::step()
     const uint32_t instr = fetch();
 
     // --- 2. Avanzar el PC a la siguiente instruccion ---
-    // En instrucciones de salto/branch, el Execute (Fase 3) sobreescribira pc_.
     pc_ += 4;
 
     // --- 3. DECODE: extraer opcode (bits [6:0]) ---
     const uint32_t opcode = get_opcode(instr);
 
-    // Campos adicionales disponibles para el Execute (Fase 3).
-    // Se extraen aqui para que cada case los tenga listos.
     const uint8_t  rd     = get_rd(instr);
     const uint8_t  rs1    = get_rs1(instr);
     const uint8_t  rs2    = get_rs2(instr);
@@ -384,20 +306,14 @@ void Simulator::step()
     // --- 4. DISPATCH: switch por familia de instrucciones ---
     switch (opcode) {
 
-        // -----------------------------------------------------------------
         // LUI — Load Upper Immediate
-        // rd = imm_U  (imm ya tiene ceros en bits [11:0])
-        // -----------------------------------------------------------------
         case OP_LUI: {
             const int32_t imm = extract_imm_U(instr);
             set_reg(rd, static_cast<uint32_t>(imm));
             break;
         }
 
-        // -----------------------------------------------------------------
         // AUIPC — Add Upper Immediate to PC
-        // rd = (PC de esta instruccion) + imm_U
-        // -----------------------------------------------------------------
         case OP_AUIPC: {
             const int32_t  imm     = extract_imm_U(instr);
             const uint32_t this_pc = pc_ - 4u;
@@ -405,10 +321,7 @@ void Simulator::step()
             break;
         }
 
-        // -----------------------------------------------------------------
         // JAL — Jump And Link
-        // rd  = PC+4 ; PC = (PC de esta instruccion) + imm_J
-        // -----------------------------------------------------------------
         case OP_JAL: {
             const int32_t  imm      = extract_imm_J(instr);
             const uint32_t ret_addr = pc_;         // pc_ ya es PC+4
@@ -418,10 +331,7 @@ void Simulator::step()
             break;
         }
 
-        // -----------------------------------------------------------------
         // JALR — Jump And Link Register
-        // rd  = PC+4 ; PC = (rs1 + imm_I) & ~1
-        // -----------------------------------------------------------------
         case OP_JALR: {
             const int32_t  imm      = extract_imm_I(instr);
             const uint32_t ret_addr = pc_;         // pc_ ya es PC+4
@@ -431,10 +341,7 @@ void Simulator::step()
             break;
         }
 
-        // -----------------------------------------------------------------
         // Branches — BEQ, BNE, BLT, BGE, BLTU, BGEU
-        // Si condicion se cumple: PC = (PC de esta instruccion) + imm_B
-        // -----------------------------------------------------------------
         case OP_BRANCH: {
             const int32_t  imm     = extract_imm_B(instr);
             const uint32_t this_pc = pc_ - 4u;
@@ -468,10 +375,7 @@ void Simulator::step()
             break;
         }
 
-        // -----------------------------------------------------------------
         // Loads — LB, LH, LW, LBU, LHU
-        // addr = rs1 + imm_I ;  LB/LH aplican sign-extension
-        // -----------------------------------------------------------------
         case OP_LOAD: {
             const int32_t  imm  = extract_imm_I(instr);
             const uint32_t addr = regs_[rs1] + static_cast<uint32_t>(imm);
@@ -513,10 +417,7 @@ void Simulator::step()
             break;
         }
 
-        // -----------------------------------------------------------------
         // Stores — SB, SH, SW
-        // addr = rs1 + imm_S ; mem[addr] = rs2[ancho]
-        // -----------------------------------------------------------------
         case OP_STORE: {
             const int32_t  imm  = extract_imm_S(instr);
             const uint32_t addr = regs_[rs1] + static_cast<uint32_t>(imm);
@@ -545,10 +446,8 @@ void Simulator::step()
             break;
         }
 
-        // -----------------------------------------------------------------
         // ALU con Inmediato — ADDI, SLTI, SLTIU, XORI, ORI, ANDI,
         //                      SLLI, SRLI, SRAI
-        // -----------------------------------------------------------------
         case OP_ALUI: {
             const int32_t  imm = extract_imm_I(instr);
             const int32_t  vs1 = static_cast<int32_t>(regs_[rs1]);
@@ -598,11 +497,8 @@ void Simulator::step()
             break;
         }
 
-        // -----------------------------------------------------------------
         // ALU Registro-Registro — ADD, SUB, SLL, SLT, SLTU, XOR,
         //                          SRL, SRA, OR, AND
-        // Diferenciados por funct3 + bit 30 de funct7 (flag 'alt').
-        // -----------------------------------------------------------------
         case OP_ALU: {
             const int32_t  vs1 = static_cast<int32_t>(regs_[rs1]);
             const int32_t  vs2 = static_cast<int32_t>(regs_[rs2]);
@@ -655,25 +551,15 @@ void Simulator::step()
             break;
         }
 
-        // -----------------------------------------------------------------
         // FENCE — barrera de ordenacion de memoria
-        // En un simulador de ejecucion en orden (in-order, single-thread)
-        // se trata como NOP; no hay reordenamiento que serializar.
-        // -----------------------------------------------------------------
         case OP_FENCE:
             break;
 
-        // -----------------------------------------------------------------
         // SYSTEM — ECALL, EBREAK
-        // Fase 3: tratados como NOP (sin soporte de sistema operativo).
-        // Se pueden extender para emular syscalls en fases posteriores.
-        // -----------------------------------------------------------------
         case OP_SYSTEM:
             break;
 
-        // -----------------------------------------------------------------
         // Opcode desconocido o instruccion ilegal
-        // -----------------------------------------------------------------
         default: {
             ostringstream oss;
             oss << "\n[ILLEGAL INSTRUCTION] opcode desconocido\n"
@@ -690,9 +576,7 @@ void Simulator::step()
     }
 }
 
-// =============================================================================
 // Impresion de estado
-// =============================================================================
 
 void Simulator::print_state() const
 {

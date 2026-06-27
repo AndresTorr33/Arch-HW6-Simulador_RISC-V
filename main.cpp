@@ -1,15 +1,3 @@
-// =============================================================================
-// main.cpp — Punto de entrada interactivo del Simulador RISC-V RV32I
-// =============================================================================
-// Uso:
-//   ./riscv_sim.exe <archivo.bin>
-//
-// Carga el archivo binario crudo y abre una terminal interactiva para
-// ejecutar paso a paso (step), ver registros (regs) o memoria (mem).
-//
-// Estandar: C++17
-// =============================================================================
-
 #include "Simulator.hpp"
 
 #include <cstdlib>     // EXIT_SUCCESS, EXIT_FAILURE
@@ -21,9 +9,7 @@
 
 int main(int argc, char* argv[])
 {
-    // -------------------------------------------------------------------------
     // Validar argumentos de linea de comandos
-    // -------------------------------------------------------------------------
     if (argc < 2) {
         cerr << "Error: se requiere un archivo binario como argumento.\n"
                   << "Uso:   " << argv[0] << " <archivo.bin>\n"
@@ -31,9 +17,7 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    // -------------------------------------------------------------------------
     // Crear el simulador y cargar el archivo
-    // -------------------------------------------------------------------------
     Simulator sim;
 
     if (!sim.load_from_file(argv[1])) {
@@ -44,13 +28,11 @@ int main(int argc, char* argv[])
     cout << "[LOAD OK] \"" << argv[1] << "\" listo para ejecucion.\n";
     cout << "Comandos: 'step' (avanzar), 'run' (ejecutar hasta el final), 'regs' (registros), 'mem <hex>' (memoria), 'exit' (salir)\n\n";
 
-    // -------------------------------------------------------------------------
     // Bucle interactivo REPL (Read-Eval-Print Loop)
-    // -------------------------------------------------------------------------
     string line;
     while (true) {
         cout << "> ";
-        if (!getline(cin, line)) break; // Maneja EOF (Ctrl+D / Ctrl+Z)
+        if (!getline(cin, line)) break;
 
         stringstream ss(line);
         string command;
